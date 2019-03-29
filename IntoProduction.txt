@@ -1,0 +1,215 @@
+1. Creating the PostgreSQL Database and User
+sudo -u postgres psql
+
+a. create a database for your project: 
+postgres=# CREATE DATABASE myproject;
+
+b. create a database user for our project:
+postgres=# CREATE USER myprojectuser WITH PASSWORD 'password';
+
+c. setting the default encoding to UTF-8:
+postgres=# ALTER ROLE myprojectuser SET client_encoding TO 'utf8';
+
+d. setting the default transaction isolation scheme to "read committed", which blocks reads from uncommitted transactions. 
+postgres=# ALTER ROLE myprojectuser SET default_transaction_isolation TO 'read committed';
+
+e. set the timezone:
+postgres=# ALTER ROLE myprojectuser SET timezone TO 'UTC';
+
+f. give our new user access to administer our new database:
+postgres=# GRANT ALL PRIVILEGES ON DATABASE myproject TO myprojectuser;
+
+g. exit the PostgresSQL:
+postgres=# \q
+
+2. Create a Python Virtual Environment:
+a. install the package: 
+sudo -H pip3 install --upgrade pip
+sudo -H pip3 install virtualenv
+
+b. create and move into a directory:
+mkdir ~/myprojectdir
+cd ~/myprojectdir
+
+c. create virtual environment:
+virtualenv myprojectenv
+
+d. activate the virtual environment:
+source myprojectenv/bin/activate
+
+e. install django,gunicorn,psycopg2-binray in the virtualenv:
+pip install django, gunicorn, psycopg2-binary
+
+3. create and configure new project:
+a. django-admin.py startproject myproject ~/myprojectdir
+
+4. Adjust the project settings:
+a. sudo vim ~/myprojectdir/myproject/settings.py
+
+b. modify the setting in settings.py:
+ALLOWED_HOSTS = ['your_server_domain_or_IP', 'second_domain_or_IP','localhost']
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql_psycopg2',
+        'NAME': 'myproject',
+        'USER': 'myprojectuser',
+        'PASSWORD': 'password',
+        'HOST': 'localhost',
+        'PORT': '',
+    }
+}
+
+STATIC_ROOT = os.path.join(BASE_DIR, 'static/')
+
+5. Complete initial project setup:
+a.     ~/myprojectdir/manage.py makemigrations
+        ~/myprojectdir/manage.py migrate
+        ~/myprojectdir/manage.py createsuperuser
+        ~/myprojectdir/manage.py collectstatic
+
+6. Testing Gunicorn's Ability to Serve the Project
+a. test server: 
+   cd ~/myprojectdir
+   gunicorn --bind 0.0.0.0:3389 myproject.wsgi
+
+b. deactive virtual environment:
+    deactivate
+
+7. Creating systemd Socket and Service Files for Gunicorn:
+   (The Gunicorn socket will be created at boot and will listen for connections. 
+   When a connection occurs, systemd will automatically start the Gunicorn process to handle the connection. )
+   sudo vim /etc/systemd/system/gunicorn.socket
+
+(In the gunicorn.socket):
+[Unit]
+Description=gunicorn socket
+
+[Socket]
+ListenStream=/run/gunicorn.sock
+
+[Install]
+WantedBy=sockets.target
+   
+    sudo vim /etc/systemd/system/gunicorn.service
+
+(In the gunicorn.service):
+[Unit]
+Description=gunicorn daemon
+Requires=gunicorn.socket
+After=network.target
+
+[Service]
+User=ubuntu
+Group=www-data
+WorkingDirectory=/home/ubuntu/myprojectdir
+ExecStart=/home/ubuntu/myprojectdir/myprojectenv/bin/gunicorn \
+          --access-logfile - \
+          --workers 3 \
+          --bind unix:/run/gunicorn.sock \
+          myproject.wsgi:application
+
+[Install]
+WantedBy=single-user.target
+    
+    sudo systemctl start gunicorn.socket
+    sudo systemctl enable gunicorn.socket
+
+8. Check for the Gunicorn Socket File:
+check the status of the process:
+   sudo systemctl status gunicorn.socket
+check the file of gunicorn.sock:
+   file /run/gunicorn.sock
+
+***check the Gunicorn socket's logs by typing:
+    sudo journalctl -u gunicorn.socket
+
+9. Test Socket Activation:
+   sudo systemctl status gunicorn
+
+10. send a connection to the socket through curl:
+  sudo curl -u --unix-socket /run/gunicorn.sock localhost
+  sudo systemctl status gunicorn
+
+** check the logs for the problems occurred:
+  sudo journalctl -u gunicorn
+
+** if make changes to the gunicorn.service file:
+  sudo systemctl daemon-reload
+  sudo systemctl restart gunicorn
+
+11. Configure Nginx to Proxy Pass to Gunicorn:
+configure Nginx in /etc/nginx/nginx.conf or /etc/nginx/sites-available/myproject:
+
+a. if change configure nginx in /etc/nginx/sites-available/myproject:
+ (in myproject file):
+server {
+    listen 80;
+    server_name server_domain_or_IP;
+
+    location = /favicon.ico { access_log off; log_not_found off; }
+    location /static/ {
+        root /home/sammy/myprojectdir;
+    }
+
+    location / {
+        include proxy_params;
+        proxy_pass http://unix:/run/gunicorn.sock;
+    }
+}
+
+then enable the file by linking it to the sites-enabled directory:
+sudo ln -s /etc/nginx/sites-available/myproject /etc/nginx/sites-enabled
+
+Test nginx configuration for syntax error:
+sudo nginx -t
+
+restart Nginx by typing:
+sudo systemctl restart nginx
+
+open access:
+sudo ufw allow 'Nginx Full'
+
+b. if change configure nginx in /etc/nginx/nginx.conf:
+(in nginx.conf):
+user ubuntu www-data;
+
+worker_processes auto;
+
+#pid logs/nginx.pid;
+
+events{
+  worker_connections 768;
+}
+
+http{
+  server {
+    listen 80;
+    server_name 148.70.213.120;
+
+    location = /favicon.ico { access_log off; log_not_found off; }
+    location /static/ {
+        root /home/ubuntu/myprojectdir;
+    }
+
+    location / {
+        proxy_pass http://unix:/run/gunicorn.sock;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real_IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+   }
+}
+
+12. set the Nginx chkconfig:
+     a.  sudo vim /etc/init.d/nginx
+     b.  list nginx service in the chkconfig management list:
+         sysv-rc-conf --list /etc/init.d/nginx
+     c. sudo service nginx start
+        sudo service nginx stop
+     d. set host configuration start:
+         chkconfig nginx on 
+     e. watch the Nginx status: 
+        systemctl status nginx
+ 
+ reference: https://www.digitalocean.com/community/tutorials/how-to-set-up-django-with-postgres-nginx-and-gunicorn-on-ubuntu-18-04
