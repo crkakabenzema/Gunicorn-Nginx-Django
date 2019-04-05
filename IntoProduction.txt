@@ -183,7 +183,8 @@ error_log /var/log/nginx/error.log warn;
 #pid logs/nginx.pid;
 
 events{
-  worker_connections 768;
+  worker_connections 768;   # increase if you have lots of clients
+ #accept_mutex #set to 'on' if nginx worker_processes > 1
 }
 
 http{
@@ -193,21 +194,27 @@ http{
   sendfile on;
 
   upstream app_server {
-
+  
+  # for UNIX domain socket setups
   server unix:/run/gunicorn.sock;
+  
+  # for a TCP configuration
+  # server locahost:portnumber;
 }
 
   server {
   listen 80;
-
+  
+  # set the correct hosts for site
   server_name 94.191.41.250;
 
   keepalive_timeout 5;
-
+  
+  # path for static files
   root /home/ubuntu/projectdir/static;
 
   location / {
-
+  # checks for static files, if not find proxy to app
     try_files $uri @proxy_to_app;
   }
 
@@ -215,7 +222,7 @@ http{
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_set_header Host $http_host;
-    
+    # we don't want nginx trying to do something clever with redirects
     proxy_redirect off;
     proxy_pass http://app_server;
   }
