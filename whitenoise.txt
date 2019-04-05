@@ -1,0 +1,22 @@
+Make sure staticfiles is configured correctly
+STATIC_ROOT = os.path.join(BASE_DIR, 'static')
+
+./manage.py collectstatic
+
+Enable WhiteNoise:
+MIDDLEWARE = [
+  'django.middleware.security.SecurityMiddleware',
+  'whitenoise.middleware.WhiteNoiseMiddleware',
+  # ...
+]
+
+Add compression and caching support
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+Using WhiteNoise in development
+INSTALLED_APPS = [
+    'whitenoise.runserver_nostatic',
+    'django.contrib.staticfiles',
+    # ...
+]
+
