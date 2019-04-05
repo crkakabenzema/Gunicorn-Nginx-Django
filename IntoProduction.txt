@@ -62,6 +62,8 @@ DATABASES = {
 
 STATIC_ROOT = os.path.join(BASE_DIR, 'static/')
 
+e. follow the instruction of the note whitenoise
+
 5. Complete initial project setup:
 a.     ~/myprojectdir/manage.py makemigrations
         ~/myprojectdir/manage.py migrate
