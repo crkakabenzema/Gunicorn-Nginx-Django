@@ -1,0 +1,61 @@
+static files(eg.images, JS, CSS)：
+1. Make sure that django.contrib.staticfiles is included in your INSTALLED_APPS.
+2. In your settings file, define STATIC_URL, for example:
+    STATIC_URL = '/static/'
+    STATIC_ROOT = os.path.join(BASE_DIR, 'static/')
+
+3. In settings file, defines MEDIA_URL, for example:
+    MEDIA_URL = '/my_app/static/my_app/'
+    MEDIA_ROOT = os.path.join(BASE_DIR, 'my_app/static/my_app/') 
+    
+3. In your templates, use the static template tag to build the URL for the given relative path using the configured STATICFILES_STORAGE.
+    {% load static %}
+    <img src="{% static "my_app/example.jpg" %}" alt="My image">
+4. Store your image files in a folder called static in your app. For example my_app/static/my_app/example.jpg.
+5. Store your css files in a folder called css in your app. Ex. my_app/static/css/styles.css
+6. <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+
+for static page of project(templates):
+1. you can customize the order of findtemplates for template pages in settings.py:
+template {dir=()}
+2. store  pages in a folder called templates in your app. For example my_app/templates/xxx.html.
+3. In views.py: return render(request, 'index.html')
+
+for static page of app(templates):
+1. In views.py: 
+from django.views import generic
+class BookListView(generic.ListView):
+     model = Book
+通用视图将查询数据库，以获取指定模型（Book）的所有记录，然后呈现位于/projectdir/appname/templates/appname/the_model_name_list.html 的模板
+2. 可以覆盖get_context_data()，以将其他上下文变量传递给模板。下面的片段，显示了如何将一个名为“some_data”的变量添加到上下文中。
+class BookListView(generic.ListView):
+    model = Book
+
+    def get_context_data(self, **kwargs):
+        # Call the base implementation first to get the context
+        context = super(BookListView, self).get_context_data(**kwargs)
+        # Create any data and add it to the context
+        context['some_data'] = 'This is just some data'
+        return context
+
+3. class BookListView(generic.ListView):
+    model = Book
+
+equal:
+def book_detail_view(request,pk):
+    try:
+        book_id=Book.objects.get(pk=pk)
+    except Book.DoesNotExist:
+        raise Http404("Book does not exist")
+
+    #book_id=get_object_or_404(Book, pk=pk)
+    
+    return render(
+        request,
+        'catalog/book_detail.html',
+        context={'book':book_id,}
+    )
+
+static pages href:
+#在app/urls.py中,定义与URL匹配的tag name='books',调用视图函数（views.BookListView.as_view()）
+#形式为 {% url 'books' %}
